@@ -7,6 +7,18 @@ import networkx as nx
 from collections import defaultdict
 import pandas as pd
 
+
+# Password protection
+PASSWORD = "foxy123"
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    pwd = st.text_input("🔒 Enter password", type="password")
+    if pwd == PASSWORD:
+        st.session_state.authenticated = True
+    else:
+        st.stop()
 st.set_page_config(layout="wide")
 
 st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
