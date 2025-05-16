@@ -22,11 +22,12 @@ if not st.session_state.authenticated:
     pwd = st.text_input("🔒 Enter password to start", type="password")
     if pwd == PASSWORD:
         st.session_state.authenticated = True
-        st.experimental_rerun()  # Ensures a clean refresh after login
+        st.rerun()  # ✅ Use this for latest Streamlit
     else:
         st.stop()
 
 st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
+
 
 # ===============================
 # Layout: Step 1 and Step 2 side-by-side
