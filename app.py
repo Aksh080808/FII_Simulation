@@ -8,7 +8,7 @@ from io import BytesIO
 import zipfile
 
 # ===============================
-# 🔐 Password protection without rerun
+# Password protection without rerun
 # ===============================
 PASSWORD = "foxy123"
 st.set_page_config(layout="wide")
@@ -204,9 +204,10 @@ if st.session_state.get("simulate"):
     ax.bar([i + bw for i in x], [agg[g]['out'] for g in groups], width=bw, label='Out', color='lightgreen')
     ax.bar([i + 2 * bw for i in x], [agg[g]['wip'] for g in groups], width=bw, label='WIP', color='salmon')
     ax.set_xticks([i + bw for i in x])
-    ax.set_xticklabels(groups)
-    ax.legend()
+    ax.set_xticklabels(groups, fontsize=9)
+    ax.legend(fontsize=9)
     ax.grid(True, linestyle='--', alpha=0.6)
+    ax.tick_params(axis='both', which='major', labelsize=9)
     st.pyplot(fig)
     buf = BytesIO()
     fig.savefig(buf, format='png')
@@ -217,10 +218,11 @@ if st.session_state.get("simulate"):
     for group in groups:
         fig, ax = plt.subplots(figsize=(8, 3))
         ax.plot(sim.time_points[:len(sim.wip_over_time[group])], sim.wip_over_time[group], marker='o')
-        ax.set_title(f"WIP Over Time - {group}")
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("WIP")
+        ax.set_title(f"WIP Over Time - {group}", fontsize=10)
+        ax.set_xlabel("Time (s)", fontsize=9)
+        ax.set_ylabel("WIP", fontsize=9)
         ax.grid(True, linestyle='--', alpha=0.5)
+        ax.tick_params(axis='both', which='major', labelsize=8)
         st.pyplot(fig)
         buf = BytesIO()
         fig.savefig(buf, format='png')
@@ -238,11 +240,14 @@ if st.session_state.get("simulate"):
 
     pos = nx.spring_layout(G, seed=42)
     fig, ax = plt.subplots(figsize=(10, 5))
-    nx.draw_networkx_nodes(G, pos, ax=ax, node_color='lightblue', node_size=2000)
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=10)
-    nx.draw_networkx_edges(G, pos, ax=ax, arrowstyle='->', arrowsize=20,
-                           edge_color='black', connectionstyle='arc3,rad=0.1')
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_color='lightblue', node_size=1500)
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=9)
+    nx.draw_networkx_edges(
+        G, pos, ax=ax, arrowstyle='-|>', arrowsize=20,
+        edge_color='black', connectionstyle='arc3,rad=0.1', min_source_margin=15, min_target_margin=15
+    )
     ax.set_aspect('equal')
+    ax.axis('off')
     st.pyplot(fig)
 
     # === ZIP Download for Charts ===
@@ -259,4 +264,6 @@ if st.session_state.get("simulate"):
     if st.button("🔄 Reset App"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        st.experimental_rerun()
+        # Use st.experimental_set_query_params to force a reset without rerun (works on Streamlit Cloud)
+        st.experimental_set_query_params()
+        st.stop()
