@@ -8,26 +8,28 @@ from io import BytesIO
 import zipfile
 
 # ===============================
-# 🔐 Password protection
+# 🔐 Password protection without rerun
 # ===============================
-import streamlit as st
-
 PASSWORD = "foxy123"
 st.set_page_config(layout="wide")
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+    st.session_state.password_attempted = False
 
 if not st.session_state.authenticated:
     pwd = st.text_input("🔒 Enter password to start", type="password")
-    if pwd == PASSWORD:
-        st.session_state.authenticated = True
-        st.rerun()  # ✅ Use this for latest Streamlit
-    else:
+    if pwd and not st.session_state.password_attempted:
+        st.session_state.password_attempted = True
+        if pwd == PASSWORD:
+            st.session_state.authenticated = True
+        else:
+            st.error("❌ Incorrect password.")
+            st.stop()
+    if not st.session_state.authenticated:
         st.stop()
 
 st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
-
 
 # ===============================
 # Layout: Step 1 and Step 2 side-by-side
@@ -80,6 +82,7 @@ sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100,
 if st.button("▶️ Run Simulation"):
     st.session_state.simulate = True
     st.session_state.sim_time = sim_time
+
 # === Run simulation and display results ===
 if st.session_state.get("simulate"):
     station_groups = st.session_state.station_groups
@@ -152,13 +155,11 @@ if st.session_state.get("simulate"):
                     self.env.process(self.equipment_worker(eq))
             self.env.process(self.feeder())
 
-    # Run the simulation
     env = simpy.Environment()
     sim = FactorySimulation(env, station_groups, sim_time, connections, from_stations)
     sim.run()
     env.run(until=sim_time)
 
-    # === Reporting ===
     st.markdown("---")
     st.subheader("📊 Simulation Results Summary")
 
@@ -191,6 +192,7 @@ if st.session_state.get("simulate"):
     excel_buffer = BytesIO()
     df.to_excel(excel_buffer, index=False, engine="openpyxl")
     st.download_button("📥 Download Table (Excel)", data=excel_buffer.getvalue(), file_name="simulation_results.xlsx")
+
     # === Charts ===
     chart_buffers = {}
 
@@ -238,7 +240,9 @@ if st.session_state.get("simulate"):
     fig, ax = plt.subplots(figsize=(10, 5))
     nx.draw_networkx_nodes(G, pos, ax=ax, node_color='lightblue', node_size=2000)
     nx.draw_networkx_labels(G, pos, ax=ax, font_size=10)
-    nx.draw_networkx_edges(G, pos, ax=ax, arrowstyle='->', arrowsize=20, edge_color='black')
+    nx.draw_networkx_edges(G, pos, ax=ax, arrowstyle='->', arrowsize=20,
+                           edge_color='black', connectionstyle='arc3,rad=0.1')
+    ax.set_aspect('equal')
     st.pyplot(fig)
 
     # === ZIP Download for Charts ===
