@@ -5,79 +5,80 @@ import networkx as nx
 from collections import defaultdict
 import pandas as pd
 from io import BytesIO
+import zipfile
 
-# =========================
 # Password protection
-# =========================
 PASSWORD = "foxy123"
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    pwd = st.text_input("\U0001f512 Enter password", type="password")
+    pwd = st.text_input("🔒 Enter password", type="password")
     if pwd == PASSWORD:
         st.session_state.authenticated = True
     else:
         st.stop()
 
 st.set_page_config(layout="wide")
-st.title("\U0001f6e0️ Factory Simulation App (SimPy + Streamlit)")
+st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
 
-# =========================
-# Step 1: Station Setup
-# =========================
-st.header("Step 1: Define Station Groups")
-num_groups = st.number_input("Number of Station Groups", min_value=1, step=1, value=2)
+col1, col2 = st.columns([1, 2])
 
-if "group_names" not in st.session_state:
-    st.session_state.group_names = []
-    st.session_state.station_groups = {}
+# === Left: Inputs ===
+with col1:
+    st.header("Step 1: Define Station Groups")
+    num_groups = st.number_input("Number of Station Groups", min_value=1, step=1, value=2)
 
-for i in range(num_groups):
-    with st.expander(f"Configure Group {i+1}"):
-        name = st.text_input(f"Name of Station Group {i+1}", key=f"name_{i}").strip().upper()
-        if not name:
-            continue
-        if name not in st.session_state.group_names:
-            st.session_state.group_names.append(name)
-            eq_count = st.number_input(f"Number of Equipment in {name}", min_value=1, step=1, key=f"eq_count_{i}")
-            st.session_state.station_groups[name] = {}
-            for j in range(1, eq_count + 1):
-                eq_name = f"{name} - EQ{j}"
-                ct = st.number_input(f"Cycle time for {eq_name} (sec)", min_value=0.1, step=0.1, key=f"ct_{i}_{j}")
-                st.session_state.station_groups[name][eq_name] = ct
+    if "group_names" not in st.session_state:
+        st.session_state.group_names = []
+        st.session_state.station_groups = {}
 
-# =========================
-# Step 2: Connect Stations
-# =========================
-if st.button("🔗 Connect Stations"):
-    st.session_state.show_connections = True
+    for i in range(num_groups):
+        with st.expander(f"Configure Group {i+1}"):
+            name = st.text_input(f"Name of Station Group {i+1}", key=f"name_{i}").strip().upper()
+            if not name:
+                continue
+            if name not in st.session_state.group_names:
+                st.session_state.group_names.append(name)
+                eq_count = st.number_input(f"Number of Equipment in {name}", min_value=1, step=1, key=f"eq_count_{i}")
+                st.session_state.station_groups[name] = {}
+                for j in range(1, eq_count + 1):
+                    eq_name = f"{name} - EQ{j}"
+                    ct = st.number_input(f"Cycle time for {eq_name} (sec)", min_value=0.1, step=0.1, key=f"ct_{i}_{j}")
+                    st.session_state.station_groups[name][eq_name] = ct
 
-if st.session_state.get("show_connections"):
-    st.header("Step 2: Define Station Connections")
-    st.session_state.from_stations = {}
-    st.session_state.connections = {}
+    if st.button("🔗 Connect Stations"):
+        st.session_state.show_connections = True
 
-    for i, name in enumerate(st.session_state.group_names):
-        with st.expander(f"{name} Connections"):
-            from_group = st.multiselect(f"{name} receives from:", ['START'] + st.session_state.group_names, key=f"from_{i}")
-            st.session_state.from_stations[name] = [] if 'START' in from_group else from_group
+    if st.session_state.get("show_connections"):
+        st.header("Step 2: Connect Stations")
+        st.session_state.from_stations = {}
+        st.session_state.connections = {}
 
-            to_group = st.multiselect(f"{name} sends to:", ['STOP'] + st.session_state.group_names, key=f"to_{i}")
-            st.session_state.connections[name] = [] if 'STOP' in to_group else to_group
+        for i, name in enumerate(st.session_state.group_names):
+            with st.expander(f"{name} Connections"):
+                from_group = st.multiselect(f"{name} receives from:", ['START'] + st.session_state.group_names, key=f"from_{i}")
+                st.session_state.from_stations[name] = [] if 'START' in from_group else from_group
 
-    if st.button("⏱️ Enter Simulation Duration"):
-        st.session_state.show_duration = True
+                to_group = st.multiselect(f"{name} sends to:", ['STOP'] + st.session_state.group_names, key=f"to_{i}")
+                st.session_state.connections[name] = [] if 'STOP' in to_group else to_group
 
-# =========================
-# Step 3: Duration Input & Simulation
-# =========================
-if st.session_state.get("show_duration"):
-    sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
-    if st.button("▶️ Run Simulation"):
+        if st.button("⏱️ Enter Simulation Duration"):
+            st.session_state.show_duration = True
+
+    if st.session_state.get("show_duration"):
+        sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
+        if st.button("▶️ Run Simulation"):
+            st.session_state.simulate = True
+            st.session_state.sim_time = sim_time
+
+# === Right: Results ===
+with col2:
+    if st.session_state.get("simulate"):
         station_groups = st.session_state.station_groups
         from_stations = st.session_state.from_stations
         connections = st.session_state.connections
+        sim_time = st.session_state.sim_time
 
         class FactorySimulation:
             def __init__(self, env, station_groups, duration, connections, from_stations):
@@ -149,6 +150,7 @@ if st.session_state.get("show_duration"):
         sim.run()
         env.run(until=sim_time)
 
+        # Summary
         groups = list(station_groups.keys())
         agg = defaultdict(lambda: {'in': 0, 'out': 0, 'wip': 0})
         for group in station_groups:
@@ -174,13 +176,15 @@ if st.session_state.get("show_duration"):
             'Utilization (%)': [f"{u * 100:.1f}%" for u in utilization_vals]
         })
 
-        st.subheader("\U0001f4c8 Simulation Results")
+        st.subheader("📊 Simulation Results")
         st.dataframe(df)
         excel_buffer = BytesIO()
-        df.to_excel(excel_buffer, index=False)
+        df.to_excel(excel_buffer, index=False, engine='openpyxl')
         st.download_button("Download Results Table (Excel)", data=excel_buffer.getvalue(), file_name="simulation_results.xlsx")
 
-        st.subheader("\U0001f4c9 Throughput & WIP")
+        # Charts
+        chart_buffers = {}
+        st.subheader("📈 Throughput & WIP")
         fig, ax = plt.subplots(figsize=(12, 5))
         x = range(len(groups))
         bw = 0.25
@@ -192,11 +196,12 @@ if st.session_state.get("show_duration"):
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.6)
         st.pyplot(fig)
-        chart_buf = BytesIO()
-        fig.savefig(chart_buf, format="png")
-        st.download_button("Download Chart (PNG)", data=chart_buf.getvalue(), file_name="throughput_wip_chart.png")
+        buf = BytesIO()
+        fig.savefig(buf, format='png')
+        chart_buffers['throughput_wip.png'] = buf
+        st.download_button("Download Chart (PNG)", data=buf.getvalue(), file_name="throughput_wip.png")
 
-        st.subheader("\U0001f4c2 WIP Over Time")
+        st.subheader("📉 WIP Over Time")
         for group in groups:
             fig, ax = plt.subplots(figsize=(8, 3))
             ax.plot(sim.time_points[:len(sim.wip_over_time[group])], sim.wip_over_time[group], marker='o')
@@ -205,23 +210,31 @@ if st.session_state.get("show_duration"):
             ax.set_ylabel("WIP")
             ax.grid(True, linestyle='--', alpha=0.5)
             st.pyplot(fig)
-            chart_buf = BytesIO()
-            fig.savefig(chart_buf, format="png")
-            st.download_button(f"Download {group} WIP Chart (PNG)", data=chart_buf.getvalue(), file_name=f"{group}_wip_chart.png")
+            buf = BytesIO()
+            fig.savefig(buf, format='png')
+            chart_buffers[f"{group}_wip.png"] = buf
+            st.download_button(f"Download {group} Chart", data=buf.getvalue(), file_name=f"{group}_wip.png")
 
-        st.subheader("\U0001f501 Process Layout Diagram")
+        st.subheader("🔁 Process Layout Diagram")
         G = nx.DiGraph()
         for g in station_groups:
             G.add_node(g)
         for src, tgts in connections.items():
             for tgt in tgts:
                 G.add_edge(src, tgt)
-
         pos = nx.spring_layout(G, seed=42)
         fig, ax = plt.subplots(figsize=(10, 5))
         nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=2000,
                 arrows=True, ax=ax, arrowstyle='-|>', arrowsize=20)
         st.pyplot(fig)
+
+        # Download all charts as ZIP
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            for fname, fbuf in chart_buffers.items():
+                zf.writestr(fname, fbuf.getvalue())
+        filename = st.text_input("Enter ZIP filename", value="simulation_charts")
+        st.download_button("Download All Charts as ZIP", data=zip_buffer.getvalue(), file_name=f"{filename}.zip")
 
         if st.button("🔄 Reset App"):
             for key in list(st.session_state.keys()):
