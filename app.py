@@ -29,7 +29,7 @@ if not st.session_state.authenticated:
     if not st.session_state.authenticated:
         st.stop()
 
-st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
+st.title("🛠️ Production Line Simulation App (Based on Discrete Event Simulation)")
 
 # ===============================
 # Layout: Step 1 and Step 2 side-by-side
@@ -61,7 +61,7 @@ with col1:
 
 # === Step 2: Connect Stations ===
 with col2:
-    st.header("Step 2: Connect Stations")
+    st.header("Step 2: 🔗 Connect Stations")
     if "from_stations" not in st.session_state:
         st.session_state.from_stations = {}
     if "connections" not in st.session_state:
@@ -77,7 +77,7 @@ with col2:
 
 # === Step 3: Duration ===
 st.markdown("---")
-st.header("Step 3: Enter Simulation Duration")
+st.header("Step 3: ⏱️ Enter Simulation Duration")
 sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
 if st.button("▶️ Run Simulation"):
     st.session_state.simulate = True
