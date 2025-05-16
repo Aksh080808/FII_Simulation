@@ -10,18 +10,22 @@ import zipfile
 # ===============================
 # 🔐 Password protection
 # ===============================
+import streamlit as st
+
 PASSWORD = "foxy123"
+st.set_page_config(layout="wide")
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    pwd = st.text_input("🔒 Enter password", type="password")
+    pwd = st.text_input("🔒 Enter password to start", type="password")
     if pwd == PASSWORD:
         st.session_state.authenticated = True
+        st.experimental_rerun()  # Ensures a clean refresh after login
     else:
         st.stop()
 
-st.set_page_config(layout="wide")
 st.title("🛠️ Factory Simulation App (SimPy + Streamlit)")
 
 # ===============================
