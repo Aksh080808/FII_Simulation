@@ -178,104 +178,138 @@ if st.session_state.get("simulate"):
     sim.run()
     env.run(until=sim_time)
 
-    # === Results Summary ===
-    st.markdown("---")
-    st.subheader("📊 Simulation Results Summary")
-    groups = list(valid_groups.keys())
-    agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': [], 'wip': 0})
+# === Results Summary ===
+st.markdown("---")
+st.subheader("📊 Simulation Results Summary")
 
-    for group in groups:
-        eqs = valid_groups[group]
-        for eq in eqs:
-            agg[group]['in'] += sim.throughput_in[eq]
-            agg[group]['out'] += sim.throughput_out[eq]
-            agg[group]['busy'] += sim.equipment_busy_time[eq]
-            agg[group]['cycle_times'].append(sim.cycle_times[eq])
-            agg[group]['count'] += 1
-        prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
-        curr_in = agg[group]['in']
-        agg[group]['wip'] = max(0, prev_out - curr_in)
+groups = list(valid_groups.keys())
+agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': [], 'wip': 0})
 
-    df = pd.DataFrame([{
-        "Station Group": g,
-        "Boards In": agg[g]['in'],
-        "Boards Out": agg[g]['out'],
-        "WIP": agg[g]['wip'],
-        "Number of Equipment": agg[g]['count'],
-        "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
-        "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
-    } for g in groups])
+for group in groups:
+    eqs = valid_groups[group]
+    for eq in eqs:
+        agg[group]['in'] += sim.throughput_in[eq]
+        agg[group]['out'] += sim.throughput_out[eq]
+        agg[group]['busy'] += sim.equipment_busy_time[eq]
+        agg[group]['cycle_times'].append(sim.cycle_times[eq])
+        agg[group]['count'] += 1
+    prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
+    curr_in = agg[group]['in']
+    agg[group]['wip'] = max(0, prev_out - curr_in)
 
-    st.dataframe(df, use_container_width=True)
+df = pd.DataFrame([{
+    "Station Group": g,
+    "Boards In": agg[g]['in'],
+    "Boards Out": agg[g]['out'],
+    "WIP": agg[g]['wip'],
+    "Number of Equipment": agg[g]['count'],
+    "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
+    "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
+} for g in groups])
 
+st.dataframe(df, use_container_width=True)
 
-    # Excel download
-    towrite = BytesIO()
-    df.to_excel(towrite, index=False, sheet_name="Summary")
-    towrite.seek(0)
-    st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+# Excel download
+towrite = BytesIO()
+df.to_excel(towrite, index=False, sheet_name="Summary")
+towrite.seek(0)
+st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-    # === Charts ===
-    chart_buffers = {}
+# === Results Summary ===
+st.markdown("---")
+st.subheader("📊 Simulation Results Summary")
 
-    st.subheader("📈 Throughput & WIP")
-    fig, ax = plt.subplots(figsize=(12, 5))
-    x = range(len(groups))
-    bw = 0.25
-    ax.bar(x, [agg[g]['in'] for g in groups], width=bw, label='In', color='skyblue')
-    ax.bar([i + bw for i in x], [agg[g]['out'] for g in groups], width=bw, label='Out', color='lightgreen')
-    ax.bar([i + 2 * bw for i in x], [agg[g]['wip'] for g in groups], width=bw, label='WIP', color='salmon')
-    ax.set_xticks([i + bw for i in x])
-    ax.set_xticklabels(groups)
-    ax.legend()
-    ax.grid(True, linestyle='--', alpha=0.6)
-    st.pyplot(fig)
+groups = list(valid_groups.keys())
+agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': [], 'wip': 0})
+
+for group in groups:
+    eqs = valid_groups[group]
+    for eq in eqs:
+        agg[group]['in'] += sim.throughput_in[eq]
+        agg[group]['out'] += sim.throughput_out[eq]
+        agg[group]['busy'] += sim.equipment_busy_time[eq]
+        agg[group]['cycle_times'].append(sim.cycle_times[eq])
+        agg[group]['count'] += 1
+    prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
+    curr_in = agg[group]['in']
+    agg[group]['wip'] = max(0, prev_out - curr_in)
+
+df = pd.DataFrame([{
+    "Station Group": g,
+    "Boards In": agg[g]['in'],
+    "Boards Out": agg[g]['out'],
+    "WIP": agg[g]['wip'],
+    "Number of Equipment": agg[g]['count'],
+    "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
+    "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
+} for g in groups])
+
+st.dataframe(df, use_container_width=True)
+
+# Excel download
+towrite = BytesIO()
+df.to_excel(towrite, index=False, sheet_name="Summary")
+towrite.seek(0)
+st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# === Charts ===
+chart_buffers = {}
+
+st.subheader("📈 Throughput & WIP")
+fig, ax = plt.subplots(figsize=(12, 5))
+x = range(len(groups))
+bw = 0.25
+ax.bar(x, [agg[g]['in'] for g in groups], width=bw, label='In', color='skyblue')
+ax.bar([i + bw for i in x], [agg[g]['out'] for g in groups], width=bw, label='Out', color='lightgreen')
+ax.bar([i + 2 * bw for i in x], [agg[g]['wip'] for g in groups], width=bw, label='WIP', color='salmon')
+ax.set_xticks([i + bw for i in x])
+ax.set_xticklabels(groups)
+ax.legend()
+ax.grid(True, linestyle='--', alpha=0.6)
+st.pyplot(fig)
+buf = BytesIO()
+fig.savefig(buf, format='png')
+chart_buffers["throughput_wip.png"] = buf
+st.download_button("📥 Download Chart (PNG)", data=buf.getvalue(), file_name="throughput_wip.png")
+
+# === WIP Over Time Plots ===
+st.subheader("📈 WIP Over Time per Station Group")
+fig, axs = plt.subplots(len(groups), 1, figsize=(8, 3 * len(groups)), sharex=True)
+if len(groups) == 1:
+    axs = [axs]
+
+img_buffers = {}
+
+for ax, group in zip(axs, groups):
+    ax.plot(sim.time_points, sim.wip_over_time[group], marker='o')
+    ax.set_title(f"WIP Over Time: {group}")
+    ax.set_ylabel("WIP (units)")
+    ax.grid(True)
+
+    # Save individual chart to buffer
     buf = BytesIO()
-    fig.savefig(buf, format='png')
-    chart_buffers["throughput_wip.png"] = buf
-    st.download_button("📥 Download Chart (PNG)", data=buf.getvalue(), file_name="throughput_wip.png")
+    fig_single, ax_single = plt.subplots()
+    ax_single.plot(sim.time_points, sim.wip_over_time[group], marker='o')
+    ax_single.set_title(f"WIP Over Time: {group}")
+    ax_single.set_ylabel("WIP (units)")
+    ax_single.set_xlabel("Time (seconds)")
+    ax_single.grid(True)
+    fig_single.savefig(buf, format="png")
+    plt.close(fig_single)
+    buf.seek(0)
+    img_buffers[group] = buf
 
-    # === WIP Over Time Plots ===
-    st.subheader("📈 WIP Over Time per Station Group")
-    fig, axs = plt.subplots(len(groups), 1, figsize=(8, 3 * len(groups)), sharex=True)
-    if len(groups) == 1:
-        axs = [axs]
+axs[-1].set_xlabel("Time (seconds)")
+st.pyplot(fig)
 
-    img_buffers = {}
+for group, buf in img_buffers.items():
+    st.download_button(f"📥 Download WIP Chart PNG - {group}", data=buf, file_name=f"WIP_{group}.png", mime="image/png")
 
-    for ax, group in zip(axs, groups):
-        ax.plot(sim.time_points, sim.wip_over_time[group], marker='o')
-        ax.set_title(f"WIP Over Time: {group}")
-        ax.set_ylabel("WIP (units)")
-        ax.grid(True)
-
-        # Save individual chart to buffer for download
-        buf = BytesIO()
-        fig_single, ax_single = plt.subplots()
-        ax_single.plot(sim.time_points, sim.wip_over_time[group], marker='o')
-        ax_single.set_title(f"WIP Over Time: {group}")
-        ax_single.set_ylabel("WIP (units)")
-        ax_single.set_xlabel("Time (seconds)")
-        ax_single.grid(True)
-        fig_single.savefig(buf, format="png")
-        plt.close(fig_single)
-        buf.seek(0)
-        img_buffers[group] = buf
-
-    axs[-1].set_xlabel("Time (seconds)")
-    st.pyplot(fig)
-
-    # Download PNG after each group plot
-    for group, buf in img_buffers.items():
-        st.download_button(f"📥 Download WIP Chart PNG - {group}", data=buf, file_name=f"WIP_{group}.png", mime="image/png")
-
-from graphviz import Digraph
-
-# === Process Layout Diagram (Linear Format using Graphviz) ===
+# === Process Layout Diagram ===
 st.subheader("🗌 Production Line Layout (Linear Flow)")
-
 layout_png_buf = BytesIO()
-if 'groups' in locals() and groups:
+
+if groups:
     try:
         dot = Digraph(format="png")
         dot.attr(rankdir="LR", size="8")
@@ -288,9 +322,12 @@ if 'groups' in locals() and groups:
 
         st.graphviz_chart(dot)
 
-        # Save as PNG
-        dot.render(filename="layout", directory="/tmp", format="png", cleanup=False)
-        with open("/tmp/layout.png", "rb") as f:
+        # Save as PNG to a writeable temp dir
+        temp_dir = "/tmp"
+        out_path = os.path.join(temp_dir, "layout")
+        dot.render(out_path, format="png", cleanup=False)
+
+        with open(f"{out_path}.png", "rb") as f:
             layout_png_buf.write(f.read())
         layout_png_buf.seek(0)
 
@@ -300,6 +337,7 @@ if 'groups' in locals() and groups:
         st.warning(f"Graphviz layout failed: {e}")
 else:
     st.info("ℹ️ Run the simulation to view layout diagram.")
+
 
 # === Bottleneck Detection and Suggestion ===
 st.subheader("💡 Bottleneck Analysis and Suggestion")
