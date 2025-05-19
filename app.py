@@ -21,7 +21,6 @@ def reset_all(skip_password=False):
     st.session_state.authenticated = skip_password
     st.session_state.password_attempted = skip_password
     st.session_state.skip_password = skip_password
-    st.experimental_rerun()
 
 if "skip_password" not in st.session_state:
     st.session_state.skip_password = False
@@ -51,6 +50,7 @@ st.title("🛠️ Production Line Simulation App (Discrete Event Simulation)")
 # Reset Button - clears all inputs & skips password on reload
 if st.button("🔄 Reset and Skip Password Next Time"):
     reset_all(skip_password=True)
+    st.experimental_rerun()
 
 # ===== Layout: Step 1 + Step 2 side by side =====
 col1, col2 = st.columns(2)
@@ -81,6 +81,7 @@ with col1:
             for j, ct in enumerate(eq_times, start=1):
                 eq_name = f"{name} - EQ{j}"
                 st.session_state.station_groups[name][eq_name] = ct
+
 # ===== Step 2: Connect Stations =====
 with col2:
     st.header("Step 2: 🔗 Connect Stations")
