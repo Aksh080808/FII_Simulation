@@ -6,12 +6,10 @@ from collections import defaultdict
 import pandas as pd
 from io import BytesIO
 import zipfile
-from graphviz import Digraph
 
-# ===== PASSWORD & RESET LOGIC =====
+# === Authentication Setup ===
 USERNAME = "aksh.fii"
 PASSWORD = "foxy123"
-
 st.set_page_config(layout="wide")
 
 def reset_all(skip_password=False):
@@ -31,33 +29,32 @@ if not st.session_state.skip_password:
         st.session_state.password_attempted = False
 
     if not st.session_state.authenticated:
-        user = st.text_input("👤 Enter username")
-        pwd = st.text_input("🔒 Enter password", type="password")
+        user = st.text_input("👤 Username")
+        pwd = st.text_input("🔒 Password", type="password")
 
         if user and pwd and not st.session_state.password_attempted:
             st.session_state.password_attempted = True
             if user == USERNAME and pwd == PASSWORD:
                 st.session_state.authenticated = True
             else:
-                st.error("❌ Incorrect username or password.")
+                st.error("❌ Incorrect credentials")
                 st.stop()
 
         if not st.session_state.authenticated:
             st.stop()
 
-st.title("🛠️ Production Line Simulation App (Discrete Event Simulation)")
+st.title("🛠️ Production Line Simulation App (SimPy)")
 
-# Reset Button
 if st.button("🔄 Reset and Skip Password Next Time"):
     reset_all(skip_password=True)
     st.experimental_rerun()
 
-# ===== Layout: Step 1 + Step 2 side by side =====
+# === Layout ===
 col1, col2 = st.columns(2)
 
-# ===== Step 1: Define Station Groups =====
+# === Step 1: Define Stations ===
 with col1:
-    st.header("Step 1: Define Station Groups")
+    st.header("Step 1: Station Groups")
     num_groups = st.number_input("Number of Station Groups", min_value=1, step=1, value=2)
 
     if "group_names" not in st.session_state or len(st.session_state.group_names) != num_groups:
@@ -65,25 +62,17 @@ with col1:
         st.session_state.station_groups = {}
 
     for i in range(num_groups):
-        name = st.text_input(f"Name of Station Group {i+1}", key=f"name_{i}").strip().upper()
+        name = st.text_input(f"Group {i+1} Name", key=f"name_{i}").strip().upper()
         st.session_state.group_names[i] = name
 
         if name:
-            eq_count = st.number_input(f"Number of Equipment in {name}", min_value=1, step=1, key=f"eq_count_{i}")
-            eq_times = []
-            for j in range(1, eq_count + 1):
-                ct = st.number_input(f"Cycle time for {name} - EQ{j} (seconds)", min_value=0.1, step=0.1, key=f"ct_{i}_{j}")
-                eq_times.append(ct)
+            eq_count = st.number_input(f"Number of Equipment in {name}", 1, key=f"eq_count_{i}")
+            eq_times = [st.number_input(f"Cycle Time for {name} - EQ{j+1} (sec)", 0.1, key=f"ct_{i}_{j+1}") for j in range(eq_count)]
+            st.session_state.station_groups[name] = {f"{name} - EQ{j+1}": ct for j, ct in enumerate(eq_times)}
 
-            st.session_state.station_groups[name] = {}
-            for j, ct in enumerate(eq_times, start=1):
-                eq_name = f"{name} - EQ{j}"
-                st.session_state.station_groups[name][eq_name] = ct
-
-# ===== Step 2: Connect Stations =====
+# === Step 2: Connections ===
 with col2:
-    st.header("Step 2: 🔗 Connect Stations")
-
+    st.header("Step 2: Connect Stations")
     if "from_stations" not in st.session_state:
         st.session_state.from_stations = {}
     if "connections" not in st.session_state:
@@ -94,39 +83,29 @@ with col2:
             continue
         with st.expander(f"{name} Connections"):
             from_options = ['START'] + [g for g in st.session_state.group_names if g and g != name]
-            from_selected = st.multiselect(f"{name} receives from:", from_options, key=f"from_{i}")
-            if 'START' in from_selected:
-                st.session_state.from_stations[name] = []
-            else:
-                st.session_state.from_stations[name] = from_selected
-
             to_options = ['STOP'] + [g for g in st.session_state.group_names if g and g != name]
-            to_selected = st.multiselect(f"{name} sends to:", to_options, key=f"to_{i}")
-            if 'STOP' in to_selected:
-                st.session_state.connections[name] = []
-            else:
-                st.session_state.connections[name] = to_selected
 
-# ===== Step 3: Simulation Duration =====
+            from_selected = st.multiselect(f"{name} receives from:", from_options, key=f"from_{i}")
+            to_selected = st.multiselect(f"{name} sends to:", to_options, key=f"to_{i}")
+
+            st.session_state.from_stations[name] = [] if "START" in from_selected else from_selected
+            st.session_state.connections[name] = [] if "STOP" in to_selected else to_selected
+
+# === Step 3: Duration ===
 st.markdown("---")
 st.header("Step 3: ⏱️ Enter Simulation Duration")
 sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
-
-if "simulate" not in st.session_state:
-    st.session_state.simulate = False
 
 if st.button("▶️ Run Simulation"):
     st.session_state.simulate = True
     st.session_state.sim_time = sim_time
 
-# ===== Simulation Logic =====
-if st.session_state.simulate:
-
+# === Run Simulation ===
+if st.session_state.get("simulate"):
     station_groups = st.session_state.station_groups
     from_stations = st.session_state.from_stations
     connections = st.session_state.connections
     sim_time = st.session_state.sim_time
-
     valid_groups = {g: eqs for g, eqs in station_groups.items() if g}
 
     class FactorySimulation:
@@ -137,23 +116,18 @@ if st.session_state.simulate:
             self.from_stations = from_stations
             self.duration = duration
 
-            self.buffers = defaultdict(lambda: simpy.Store(self.env))
-            self.resources = {
-                eq: simpy.Resource(self.env, capacity=1)
-                for group in station_groups.values() for eq in group
-            }
+            self.buffers = defaultdict(lambda: simpy.Store(env))
+            self.resources = {eq: simpy.Resource(env, capacity=1)
+                              for group in station_groups.values() for eq in group}
             self.cycle_times = {eq: ct for group in station_groups.values() for eq, ct in group.items()}
             self.equipment_to_group = {eq: group for group, eqs in station_groups.items() for eq in eqs}
-
             self.throughput_in = defaultdict(int)
             self.throughput_out = defaultdict(int)
             self.wip_over_time = defaultdict(list)
             self.time_points = []
-
-            self.board_id = 1
             self.equipment_busy_time = defaultdict(float)
+            self.board_id = 1
             self.wip_interval = 5
-
             env.process(self.track_wip())
 
         def equipment_worker(self, eq):
@@ -168,32 +142,28 @@ if st.session_state.simulate:
                     end = self.env.now
                     self.equipment_busy_time[eq] += (end - start)
                 self.throughput_out[eq] += 1
-                for tgt_group in self.connections.get(group, []):
-                    yield self.buffers[tgt_group].put(board)
+                for tgt in self.connections.get(group, []):
+                    yield self.buffers[tgt].put(board)
 
         def feeder(self):
             start_groups = [g for g in self.station_groups if not self.from_stations.get(g)]
             while self.env.now < self.duration:
                 for g in start_groups:
-                    board_name = f"Board-{self.board_id:03d}"
+                    board = f"Board-{self.board_id:03d}"
                     self.board_id += 1
-                    yield self.buffers[g].put(board_name)
+                    yield self.buffers[g].put(board)
                 yield self.env.timeout(1)
 
         def track_wip(self):
             while self.env.now < self.duration:
                 self.time_points.append(self.env.now)
                 for group in self.station_groups:
-                    upstream_groups = self.from_stations.get(group, [])
-                    if not upstream_groups:
-                        self.wip_over_time[group].append(0)
-                        continue
                     prev_out = sum(
-                        sum(self.throughput_out[eq] for eq in self.station_groups[up_g])
-                        for up_g in upstream_groups if up_g in self.station_groups
+                        sim.throughput_out[eq] for g in self.from_stations.get(group, [])
+                        for eq in self.station_groups.get(g, [])
                     )
-                    curr_in = sum(self.throughput_in[eq] for eq in self.station_groups[group])
-                    wip = max(0, prev_out - curr_in)
+                    curr_in = sum(sim.throughput_in[eq] for eq in self.station_groups[group])
+                    wip = max(0, prev_out - curr_in) if self.from_stations.get(group) else 0
                     self.wip_over_time[group].append(wip)
                 yield self.env.timeout(self.wip_interval)
 
@@ -208,11 +178,11 @@ if st.session_state.simulate:
     sim.run()
     env.run(until=sim_time)
 
+    # === Results Summary ===
     st.markdown("---")
     st.subheader("📊 Simulation Results Summary")
-
     groups = list(valid_groups.keys())
-    agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': []})
+    agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': [], 'wip': 0})
 
     for group in groups:
         eqs = valid_groups[group]
@@ -222,21 +192,22 @@ if st.session_state.simulate:
             agg[group]['busy'] += sim.equipment_busy_time[eq]
             agg[group]['cycle_times'].append(sim.cycle_times[eq])
             agg[group]['count'] += 1
+        prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
+        curr_in = agg[group]['in']
+        agg[group]['wip'] = max(0, prev_out - curr_in)
 
-    data = []
-    for group in groups:
-        utilization = agg[group]['busy'] / (sim_time * agg[group]['count']) if agg[group]['count'] > 0 else 0
-        data.append({
-            "Station Group": group,
-            "Boards In": agg[group]['in'],
-            "Boards Out": agg[group]['out'],
-            "Number of Equipment": agg[group]['count'],
-            "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[group]['cycle_times']),
-            "Utilization (%)": round(utilization * 100, 1),
-        })
+    df = pd.DataFrame([{
+        "Station Group": g,
+        "Boards In": agg[g]['in'],
+        "Boards Out": agg[g]['out'],
+        "WIP": agg[g]['wip'],
+        "Number of Equipment": agg[g]['count'],
+        "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
+        "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
+    } for g in groups])
 
-    df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True)
+
 
     # Excel download
     towrite = BytesIO()
