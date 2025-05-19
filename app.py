@@ -215,6 +215,26 @@ if st.session_state.get("simulate"):
     towrite.seek(0)
     st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+    # === Charts ===
+    chart_buffers = {}
+
+    st.subheader("📈 Throughput & WIP")
+    fig, ax = plt.subplots(figsize=(12, 5))
+    x = range(len(groups))
+    bw = 0.25
+    ax.bar(x, [agg[g]['in'] for g in groups], width=bw, label='In', color='skyblue')
+    ax.bar([i + bw for i in x], [agg[g]['out'] for g in groups], width=bw, label='Out', color='lightgreen')
+    ax.bar([i + 2 * bw for i in x], [agg[g]['wip'] for g in groups], width=bw, label='WIP', color='salmon')
+    ax.set_xticks([i + bw for i in x])
+    ax.set_xticklabels(groups)
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.6)
+    st.pyplot(fig)
+    buf = BytesIO()
+    fig.savefig(buf, format='png')
+    chart_buffers["throughput_wip.png"] = buf
+    st.download_button("📥 Download Chart (PNG)", data=buf.getvalue(), file_name="throughput_wip.png")
+
     # === WIP Over Time Plots ===
     st.subheader("📈 WIP Over Time per Station Group")
     fig, axs = plt.subplots(len(groups), 1, figsize=(8, 3 * len(groups)), sharex=True)
