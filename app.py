@@ -292,11 +292,10 @@ for group, buf in img_buffers.items():
 
 # === Process Layout Diagram ===
 st.subheader("🗌 Production Line Layout (Linear Flow)")
-layout_png_buf = BytesIO()
 
 if groups:
     try:
-        dot = Digraph(format="png")
+        dot = Digraph()
         dot.attr(rankdir="LR", size="8")
 
         for group in groups:
@@ -305,18 +304,8 @@ if groups:
         for i in range(len(groups) - 1):
             dot.edge(groups[i], groups[i + 1])
 
-        st.graphviz_chart(dot)
-
-        # Save as PNG
-        temp_dir = "/tmp"
-        out_path = os.path.join(temp_dir, "layout")
-        dot.render(out_path, format="png", cleanup=False)
-
-        with open(f"{out_path}.png", "rb") as f:
-            layout_png_buf.write(f.read())
-        layout_png_buf.seek(0)
-
-        st.download_button("📅 Download Linear Layout PNG", data=layout_png_buf, file_name="Linear_Production_Layout.png", mime="image/png")
+        # Display the diagram using Streamlit (no dependency on Graphviz system binary)
+        st.graphviz_chart(dot.source)
 
     except Exception as e:
         st.warning(f"Graphviz layout failed: {e}")
