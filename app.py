@@ -221,9 +221,20 @@ st.subheader("📈 Throughput & WIP")
 fig, ax = plt.subplots(figsize=(12, 5))
 x = range(len(groups))
 bw = 0.25
-ax.bar(x, [agg[g]['in'] for g in groups], width=bw, label='In', color='skyblue')
-ax.bar([i + bw for i in x], [agg[g]['out'] for g in groups], width=bw, label='Out', color='lightgreen')
-ax.bar([i + 2 * bw for i in x], [agg[g]['wip'] for g in groups], width=bw, label='WIP', color='salmon')
+in_vals = [agg[g]['in'] for g in groups]
+out_vals = [agg[g]['out'] for g in groups]
+wip_vals = [agg[g]['wip'] for g in groups]
+
+bars1 = ax.bar(x, in_vals, width=bw, label='In', color='skyblue')
+bars2 = ax.bar([i + bw for i in x], out_vals, width=bw, label='Out', color='lightgreen')
+bars3 = ax.bar([i + 2 * bw for i in x], wip_vals, width=bw, label='WIP', color='salmon')
+
+# Add data labels
+for bars in [bars1, bars2, bars3]:
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2.0, height + 1, f'{int(height)}', ha='center', va='bottom', fontsize=8)
+
 ax.set_xticks([i + bw for i in x])
 ax.set_xticklabels(groups)
 ax.legend()
@@ -299,7 +310,6 @@ if groups:
         st.warning(f"Graphviz layout failed: {e}")
 else:
     st.info("ℹ️ Run the simulation to view layout diagram.")
-
 # === Bottleneck Detection and Suggestion ===
 st.subheader("💡 Bottleneck Analysis and Suggestion")
 
