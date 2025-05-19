@@ -177,44 +177,6 @@ if st.session_state.get("simulate"):
     sim = FactorySimulation(env, valid_groups, sim_time, connections, from_stations)
     sim.run()
     env.run(until=sim_time)
-
-# === Results Summary ===
-st.markdown("---")
-st.subheader("📊 Simulation Results Summary")
-
-groups = list(valid_groups.keys())
-agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': [], 'wip': 0})
-
-for group in groups:
-    eqs = valid_groups[group]
-    for eq in eqs:
-        agg[group]['in'] += sim.throughput_in[eq]
-        agg[group]['out'] += sim.throughput_out[eq]
-        agg[group]['busy'] += sim.equipment_busy_time[eq]
-        agg[group]['cycle_times'].append(sim.cycle_times[eq])
-        agg[group]['count'] += 1
-    prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
-    curr_in = agg[group]['in']
-    agg[group]['wip'] = max(0, prev_out - curr_in)
-
-df = pd.DataFrame([{
-    "Station Group": g,
-    "Boards In": agg[g]['in'],
-    "Boards Out": agg[g]['out'],
-    "WIP": agg[g]['wip'],
-    "Number of Equipment": agg[g]['count'],
-    "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
-    "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
-} for g in groups])
-
-st.dataframe(df, use_container_width=True)
-
-# Excel download
-towrite = BytesIO()
-df.to_excel(towrite, index=False, sheet_name="Summary")
-towrite.seek(0)
-st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 # === Results Summary ===
 st.markdown("---")
 st.subheader("📊 Simulation Results Summary")
@@ -337,7 +299,6 @@ if groups:
         st.warning(f"Graphviz layout failed: {e}")
 else:
     st.info("ℹ️ Run the simulation to view layout diagram.")
-
 
 # === Bottleneck Detection and Suggestion ===
 st.subheader("💡 Bottleneck Analysis and Suggestion")
