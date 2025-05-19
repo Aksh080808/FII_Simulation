@@ -47,7 +47,7 @@ if not st.session_state.skip_password:
         if not st.session_state.authenticated:
             st.stop()
 
-st.title("🛠️ Production Line Simulation App (SimPy)")
+st.title("🛠️ Production Line Simulation App (Discrete Event Simulation)")
 
 if st.button("🔄 Reset and Skip Password Next Time"):
     reset_all(skip_password=True)
