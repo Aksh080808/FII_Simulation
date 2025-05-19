@@ -6,6 +6,7 @@ from collections import defaultdict
 import pandas as pd
 from io import BytesIO
 import zipfile
+from graphviz import Digraph
 
 # ===== PASSWORD & RESET LOGIC =====
 USERNAME = "aksh.fii"
@@ -280,45 +281,77 @@ if st.session_state.simulate:
     for group, buf in img_buffers.items():
         st.download_button(f"📥 Download WIP Chart PNG - {group}", data=buf, file_name=f"WIP_{group}.png", mime="image/png")
 
-    # === Process Layout Diagram ===
-    st.subheader("🗺️ Production Line Layout")
-    G = nx.DiGraph()
-    for g in groups:
-        G.add_node(g)
-    for src, tgt_list in connections.items():
-        for tgt in tgt_list:
-            if tgt in groups:
-                G.add_edge(src, tgt)
+from graphviz import Digraph
 
-    pos = nx.spring_layout(G, seed=42)
-    plt.figure(figsize=(8, 6))
-    nx.draw_networkx_nodes(G, pos, node_color="skyblue", node_size=2000)
-    nx.draw_networkx_labels(G, pos, font_size=12)
-    nx.draw_networkx_edges(G, pos, arrows=True, arrowstyle='-|>', arrowsize=20)
-    plt.axis('off')
-    st.pyplot(plt.gcf())
+# === Process Layout Diagram (Linear Format using Graphviz) ===
+st.subheader("🗌 Production Line Layout (Linear Flow)")
 
-    # Save layout chart buffer for download
-    buf_layout = BytesIO()
-    plt.savefig(buf_layout, format="png")
-    plt.close()
-    buf_layout.seek(0)
+dot = Digraph(format="png")
+dot.attr(rankdir="LR", size="8")
 
-    st.download_button("📥 Download Production Line Layout PNG", data=buf_layout, file_name="Production_Line_Layout.png", mime="image/png")
+for group in groups:
+    dot.node(group, shape="box", style="filled", fillcolor="lightblue")
 
-    # === ZIP Download of All Charts ===
-    if st.button("📦 Download All Charts as ZIP"):
-        mem_zip = BytesIO()
-        with zipfile.ZipFile(mem_zip, mode="w") as zf:
-            # Add Excel
-            zf.writestr("simulation_summary.xlsx", towrite.getvalue())
-            # Add WIP charts
-            for group, buf in img_buffers.items():
-                zf.writestr(f"WIP_{group}.png", buf.getvalue())
-            # Add Layout chart
-            zf.writestr("Production_Line_Layout.png", buf_layout.getvalue())
-        mem_zip.seek(0)
-        st.download_button("📥 Download ZIP file", data=mem_zip, file_name="production_line_charts.zip", mime="application/zip")
+# Add linear arrows
+for i in range(len(groups) - 1):
+    dot.edge(groups[i], groups[i + 1])
+
+st.graphviz_chart(dot)
+
+# Save graph as PNG to buffer for ZIP download
+layout_png_buf = BytesIO()
+dot.render(filename="layout", directory="/tmp", format="png", cleanup=False)
+with open("/tmp/layout.png", "rb") as f:
+    layout_png_buf.write(f.read())
+layout_png_buf.seek(0)
+
+st.download_button("📅 Download Linear Layout PNG", data=layout_png_buf, file_name="Linear_Production_Layout.png", mime="image/png")
+
+# === Bottleneck Detection and Suggestion ===
+st.subheader("💡 Bottleneck Analysis and Suggestion")
+
+# Find station with lowest throughput
+min_out = float('inf')
+bottleneck_group = None
+for group in groups:
+    out = agg[group]['out']
+    if out < min_out:
+        min_out = out
+        bottleneck_group = group
+
+if bottleneck_group:
+    # Calculate average CT of existing equipment
+    eqs = valid_groups[bottleneck_group]
+    avg_ct = sum(sim.cycle_times[eq] for eq in eqs) / len(eqs)
+
+    # Simulate again with 1 more equipment (mocked improvement ~not full resim to avoid lag)
+    base_out = agg[groups[-1]]['out']
+    eq_count = len(eqs)
+    new_out_bottleneck = (agg[bottleneck_group]['out'] / eq_count) * (eq_count + 1)
+    estimated_final_out = base_out + (new_out_bottleneck - agg[bottleneck_group]['out']) * 0.7  # Assume 70% propagates
+
+    delta_b = round(new_out_bottleneck - agg[bottleneck_group]['out'])
+    delta_final = round(estimated_final_out - base_out)
+
+    st.markdown(
+        f"If you **add 1 more equipment** to **{bottleneck_group}** with cycle time = **{round(avg_ct,1)} sec**,\n"
+        f"you may increase its output by approximately **{delta_b} boards**,\n"
+        f"and final output by approximately **{delta_final} boards** over {sim_time} seconds."
+    )
+
+# === ZIP Download of All Charts ===
+if st.button("📦 Download All Charts and Tables as ZIP"):
+    mem_zip = BytesIO()
+    with zipfile.ZipFile(mem_zip, mode="w") as zf:
+        # Add Excel
+        zf.writestr("simulation_summary.xlsx", towrite.getvalue())
+        # Add WIP charts
+        for group, buf in img_buffers.items():
+            zf.writestr(f"WIP_{group}.png", buf.getvalue())
+        # Add layout chart
+        zf.writestr("Linear_Production_Layout.png", layout_png_buf.getvalue())
+    mem_zip.seek(0)
+    st.download_button("📅 Download All as ZIP", data=mem_zip, file_name="simulation_results_bundle.zip", mime="application/zip")
 
 else:
     st.info("⚠️ Click **Run Simulation** to generate results and charts.")
