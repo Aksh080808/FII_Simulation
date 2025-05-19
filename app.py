@@ -8,9 +8,11 @@ from io import BytesIO
 import zipfile
 
 # ===============================
-# Password protection without rerun
+# Password and username protection
 # ===============================
+USERNAME = "aksh.fii"
 PASSWORD = "foxy123"
+
 st.set_page_config(layout="wide")
 
 if "authenticated" not in st.session_state:
@@ -18,14 +20,17 @@ if "authenticated" not in st.session_state:
     st.session_state.password_attempted = False
 
 if not st.session_state.authenticated:
-    pwd = st.text_input("🔒 Enter password to start", type="password")
-    if pwd and not st.session_state.password_attempted:
+    user = st.text_input("👤 Enter username")
+    pwd = st.text_input("🔒 Enter password", type="password")
+
+    if user and pwd and not st.session_state.password_attempted:
         st.session_state.password_attempted = True
-        if pwd == PASSWORD:
+        if user == USERNAME and pwd == PASSWORD:
             st.session_state.authenticated = True
         else:
-            st.error("❌ Incorrect password.")
+            st.error("❌ Incorrect username or password.")
             st.stop()
+
     if not st.session_state.authenticated:
         st.stop()
 
