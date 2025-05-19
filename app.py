@@ -335,11 +335,11 @@ if 'agg' in locals() and 'valid_groups' in locals():
         delta_final = round(estimated_final_out - base_out)
 
         st.markdown(
-            f"If you **add 1 more equipment** to **{bottleneck_group}** with cycle time = **{round(avg_ct,1)} sec**,
-"
-            f"you may increase its output by approximately **{delta_b} boards**,
-"
-            f"and final output by approximately **{delta_final} boards** over {sim_time} seconds."
+            (
+                f"If you **add 1 more equipment** to **{bottleneck_group}** with cycle time = **{round(avg_ct,1)} sec**, "
+                f"you may increase its output by approximately **{delta_b} boards**, "
+                f"and final output by approximately **{delta_final} boards** over {sim_time} seconds."
+            )
         )
 else:
     st.info("ℹ️ Run the simulation to get bottleneck suggestions.")
@@ -360,3 +360,4 @@ if st.button("📦 Download All Charts and Tables as ZIP"):
     st.download_button("📅 Download All as ZIP", data=mem_zip, file_name="simulation_results_bundle.zip", mime="application/zip")
 else:
     st.info("⚠️ Click **Run Simulation** to generate results and charts.")
+
