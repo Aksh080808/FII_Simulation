@@ -15,7 +15,6 @@ PASSWORD = "foxy123"
 st.set_page_config(layout="wide")
 
 def reset_all(skip_password=False):
-    # Clear all inputs but keep skip_password flag for next login
     for key in list(st.session_state.keys()):
         if key not in ("authenticated", "password_attempted", "skip_password"):
             del st.session_state[key]
@@ -48,7 +47,7 @@ if not st.session_state.skip_password:
 
 st.title("🛠️ Production Line Simulation App (Discrete Event Simulation)")
 
-# Reset Button - clears all inputs & skips password on reload
+# Reset Button
 if st.button("🔄 Reset and Skip Password Next Time"):
     reset_all(skip_password=True)
     st.experimental_rerun()
@@ -61,7 +60,6 @@ with col1:
     st.header("Step 1: Define Station Groups")
     num_groups = st.number_input("Number of Station Groups", min_value=1, step=1, value=2)
 
-    # Reset group names and station_groups if num_groups changes
     if "group_names" not in st.session_state or len(st.session_state.group_names) != num_groups:
         st.session_state.group_names = [""] * num_groups
         st.session_state.station_groups = {}
@@ -77,7 +75,6 @@ with col1:
                 ct = st.number_input(f"Cycle time for {name} - EQ{j} (seconds)", min_value=0.1, step=0.1, key=f"ct_{i}_{j}")
                 eq_times.append(ct)
 
-            # Store cycle times per equipment
             st.session_state.station_groups[name] = {}
             for j, ct in enumerate(eq_times, start=1):
                 eq_name = f"{name} - EQ{j}"
@@ -87,13 +84,11 @@ with col1:
 with col2:
     st.header("Step 2: 🔗 Connect Stations")
 
-    # Init connection dicts if missing
     if "from_stations" not in st.session_state:
         st.session_state.from_stations = {}
     if "connections" not in st.session_state:
         st.session_state.connections = {}
 
-    # For each group, select its inputs and outputs
     for i, name in enumerate(st.session_state.group_names):
         if not name:
             continue
@@ -117,7 +112,6 @@ st.markdown("---")
 st.header("Step 3: ⏱️ Enter Simulation Duration")
 sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
 
-# Clear previous sim results if inputs change
 if "simulate" not in st.session_state:
     st.session_state.simulate = False
 
@@ -125,7 +119,7 @@ if st.button("▶️ Run Simulation"):
     st.session_state.simulate = True
     st.session_state.sim_time = sim_time
 
-# ===== Simulation Class & Logic =====
+# ===== Simulation Logic =====
 if st.session_state.simulate:
 
     station_groups = st.session_state.station_groups
@@ -133,7 +127,6 @@ if st.session_state.simulate:
     connections = st.session_state.connections
     sim_time = st.session_state.sim_time
 
-    # Filter out empty or deleted stations just in case
     valid_groups = {g: eqs for g, eqs in station_groups.items() if g}
 
     class FactorySimulation:
@@ -214,11 +207,12 @@ if st.session_state.simulate:
     sim = FactorySimulation(env, valid_groups, sim_time, connections, from_stations)
     sim.run()
     env.run(until=sim_time)
+
     st.markdown("---")
     st.subheader("📊 Simulation Results Summary")
 
     groups = list(valid_groups.keys())
-    agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0})
+    agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_times': []})
 
     for group in groups:
         eqs = valid_groups[group]
@@ -226,6 +220,7 @@ if st.session_state.simulate:
             agg[group]['in'] += sim.throughput_in[eq]
             agg[group]['out'] += sim.throughput_out[eq]
             agg[group]['busy'] += sim.equipment_busy_time[eq]
+            agg[group]['cycle_times'].append(sim.cycle_times[eq])
             agg[group]['count'] += 1
 
     data = []
@@ -235,13 +230,15 @@ if st.session_state.simulate:
             "Station Group": group,
             "Boards In": agg[group]['in'],
             "Boards Out": agg[group]['out'],
+            "Number of Equipment": agg[group]['count'],
+            "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[group]['cycle_times']),
             "Utilization (%)": round(utilization * 100, 1),
         })
 
     df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True)
 
-    # Excel download after table
+    # Excel download
     towrite = BytesIO()
     df.to_excel(towrite, index=False, sheet_name="Summary")
     towrite.seek(0)
@@ -286,72 +283,80 @@ from graphviz import Digraph
 # === Process Layout Diagram (Linear Format using Graphviz) ===
 st.subheader("🗌 Production Line Layout (Linear Flow)")
 
-dot = Digraph(format="png")
-dot.attr(rankdir="LR", size="8")
-
-for group in groups:
-    dot.node(group, shape="box", style="filled", fillcolor="lightblue")
-
-# Add linear arrows
-for i in range(len(groups) - 1):
-    dot.edge(groups[i], groups[i + 1])
-
-st.graphviz_chart(dot)
-
-# Save graph as PNG to buffer for ZIP download
 layout_png_buf = BytesIO()
-dot.render(filename="layout", directory="/tmp", format="png", cleanup=False)
-with open("/tmp/layout.png", "rb") as f:
-    layout_png_buf.write(f.read())
-layout_png_buf.seek(0)
+if 'groups' in locals() and groups:
+    try:
+        dot = Digraph(format="png")
+        dot.attr(rankdir="LR", size="8")
 
-st.download_button("📅 Download Linear Layout PNG", data=layout_png_buf, file_name="Linear_Production_Layout.png", mime="image/png")
+        for group in groups:
+            dot.node(group, shape="box", style="filled", fillcolor="lightblue")
+
+        for i in range(len(groups) - 1):
+            dot.edge(groups[i], groups[i + 1])
+
+        st.graphviz_chart(dot)
+
+        # Save as PNG
+        dot.render(filename="layout", directory="/tmp", format="png", cleanup=False)
+        with open("/tmp/layout.png", "rb") as f:
+            layout_png_buf.write(f.read())
+        layout_png_buf.seek(0)
+
+        st.download_button("📅 Download Linear Layout PNG", data=layout_png_buf, file_name="Linear_Production_Layout.png", mime="image/png")
+
+    except Exception as e:
+        st.warning(f"Graphviz layout failed: {e}")
+else:
+    st.info("ℹ️ Run the simulation to view layout diagram.")
 
 # === Bottleneck Detection and Suggestion ===
 st.subheader("💡 Bottleneck Analysis and Suggestion")
 
-# Find station with lowest throughput
-min_out = float('inf')
-bottleneck_group = None
-for group in groups:
-    out = agg[group]['out']
-    if out < min_out:
-        min_out = out
-        bottleneck_group = group
+if 'agg' in locals() and 'valid_groups' in locals():
+    min_out = float('inf')
+    bottleneck_group = None
+    for group in groups:
+        out = agg[group]['out']
+        if out < min_out:
+            min_out = out
+            bottleneck_group = group
 
-if bottleneck_group:
-    # Calculate average CT of existing equipment
-    eqs = valid_groups[bottleneck_group]
-    avg_ct = sum(sim.cycle_times[eq] for eq in eqs) / len(eqs)
+    if bottleneck_group:
+        eqs = valid_groups[bottleneck_group]
+        avg_ct = sum(sim.cycle_times[eq] for eq in eqs) / len(eqs)
 
-    # Simulate again with 1 more equipment (mocked improvement ~not full resim to avoid lag)
-    base_out = agg[groups[-1]]['out']
-    eq_count = len(eqs)
-    new_out_bottleneck = (agg[bottleneck_group]['out'] / eq_count) * (eq_count + 1)
-    estimated_final_out = base_out + (new_out_bottleneck - agg[bottleneck_group]['out']) * 0.7  # Assume 70% propagates
+        base_out = agg[groups[-1]]['out']
+        eq_count = len(eqs)
+        new_out_bottleneck = (agg[bottleneck_group]['out'] / eq_count) * (eq_count + 1)
+        estimated_final_out = base_out + (new_out_bottleneck - agg[bottleneck_group]['out']) * 0.7
 
-    delta_b = round(new_out_bottleneck - agg[bottleneck_group]['out'])
-    delta_final = round(estimated_final_out - base_out)
+        delta_b = round(new_out_bottleneck - agg[bottleneck_group]['out'])
+        delta_final = round(estimated_final_out - base_out)
 
-    st.markdown(
-        f"If you **add 1 more equipment** to **{bottleneck_group}** with cycle time = **{round(avg_ct,1)} sec**,\n"
-        f"you may increase its output by approximately **{delta_b} boards**,\n"
-        f"and final output by approximately **{delta_final} boards** over {sim_time} seconds."
-    )
+        st.markdown(
+            f"If you **add 1 more equipment** to **{bottleneck_group}** with cycle time = **{round(avg_ct,1)} sec**,
+"
+            f"you may increase its output by approximately **{delta_b} boards**,
+"
+            f"and final output by approximately **{delta_final} boards** over {sim_time} seconds."
+        )
+else:
+    st.info("ℹ️ Run the simulation to get bottleneck suggestions.")
 
 # === ZIP Download of All Charts ===
 if st.button("📦 Download All Charts and Tables as ZIP"):
     mem_zip = BytesIO()
     with zipfile.ZipFile(mem_zip, mode="w") as zf:
-        # Add Excel
-        zf.writestr("simulation_summary.xlsx", towrite.getvalue())
-        # Add WIP charts
-        for group, buf in img_buffers.items():
-            zf.writestr(f"WIP_{group}.png", buf.getvalue())
-        # Add layout chart
-        zf.writestr("Linear_Production_Layout.png", layout_png_buf.getvalue())
+        if 'towrite' in locals():
+            zf.writestr("simulation_summary.xlsx", towrite.getvalue())
+        if 'img_buffers' in locals():
+            for group, buf in img_buffers.items():
+                zf.writestr(f"WIP_{group}.png", buf.getvalue())
+        if layout_png_buf.getbuffer().nbytes > 0:
+            zf.writestr("Linear_Production_Layout.png", layout_png_buf.getvalue())
+
     mem_zip.seek(0)
     st.download_button("📅 Download All as ZIP", data=mem_zip, file_name="simulation_results_bundle.zip", mime="application/zip")
-
 else:
     st.info("⚠️ Click **Run Simulation** to generate results and charts.")
