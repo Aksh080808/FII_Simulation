@@ -177,6 +177,11 @@ if st.session_state.get("simulate"):
     sim = FactorySimulation(env, valid_groups, sim_time, connections, from_stations)
     sim.run()
     env.run(until=sim_time)
+# === Check for Required Variables ===
+if 'valid_groups' not in locals() or 'sim' not in locals() or 'from_stations' not in locals() or 'sim_time' not in locals():
+    st.warning("❗ Run the simulation first to generate results.")
+    st.stop()
+
 # === Results Summary ===
 st.markdown("---")
 st.subheader("📊 Simulation Results Summary")
@@ -187,15 +192,17 @@ agg = defaultdict(lambda: {'in': 0, 'out': 0, 'busy': 0, 'count': 0, 'cycle_time
 for group in groups:
     eqs = valid_groups[group]
     for eq in eqs:
-        agg[group]['in'] += sim.throughput_in[eq]
-        agg[group]['out'] += sim.throughput_out[eq]
-        agg[group]['busy'] += sim.equipment_busy_time[eq]
-        agg[group]['cycle_times'].append(sim.cycle_times[eq])
+        agg[group]['in'] += sim.throughput_in.get(eq, 0)
+        agg[group]['out'] += sim.throughput_out.get(eq, 0)
+        agg[group]['busy'] += sim.equipment_busy_time.get(eq, 0)
+        agg[group]['cycle_times'].append(sim.cycle_times.get(eq, 0))
         agg[group]['count'] += 1
-    prev_out = sum(sim.throughput_out[eq] for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
+
+    prev_out = sum(sim.throughput_out.get(eq, 0) for g in from_stations.get(group, []) for eq in valid_groups.get(g, []))
     curr_in = agg[group]['in']
     agg[group]['wip'] = max(0, prev_out - curr_in)
 
+# Prepare DataFrame
 df = pd.DataFrame([{
     "Station Group": g,
     "Boards In": agg[g]['in'],
@@ -203,7 +210,7 @@ df = pd.DataFrame([{
     "WIP": agg[g]['wip'],
     "Number of Equipment": agg[g]['count'],
     "Cycle Times (sec)": ", ".join(str(round(ct, 1)) for ct in agg[g]['cycle_times']),
-    "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1)
+    "Utilization (%)": round((agg[g]['busy'] / (sim_time * agg[g]['count'])) * 100, 1) if agg[g]['count'] > 0 else 0
 } for g in groups])
 
 st.dataframe(df, use_container_width=True)
@@ -215,8 +222,6 @@ towrite.seek(0)
 st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # === Charts ===
-chart_buffers = {}
-
 st.subheader("📈 Throughput & WIP")
 fig, ax = plt.subplots(figsize=(12, 5))
 x = range(len(groups))
@@ -240,10 +245,12 @@ ax.set_xticklabels(groups)
 ax.legend()
 ax.grid(True, linestyle='--', alpha=0.6)
 st.pyplot(fig)
+
+# Save chart as PNG
 buf = BytesIO()
 fig.savefig(buf, format='png')
-chart_buffers["throughput_wip.png"] = buf
-st.download_button("📥 Download Chart (PNG)", data=buf.getvalue(), file_name="throughput_wip.png")
+buf.seek(0)
+st.download_button("📥 Download Chart (PNG)", data=buf, file_name="throughput_wip.png", mime="image/png")
 
 # === WIP Over Time Plots ===
 st.subheader("📈 WIP Over Time per Station Group")
@@ -275,6 +282,7 @@ for ax, group in zip(axs, groups):
 axs[-1].set_xlabel("Time (seconds)")
 st.pyplot(fig)
 
+# Chart downloads
 for group, buf in img_buffers.items():
     st.download_button(f"📥 Download WIP Chart PNG - {group}", data=buf, file_name=f"WIP_{group}.png", mime="image/png")
 
@@ -295,7 +303,7 @@ if groups:
 
         st.graphviz_chart(dot)
 
-        # Save as PNG to a writeable temp dir
+        # Save as PNG
         temp_dir = "/tmp"
         out_path = os.path.join(temp_dir, "layout")
         dot.render(out_path, format="png", cleanup=False)
@@ -310,6 +318,7 @@ if groups:
         st.warning(f"Graphviz layout failed: {e}")
 else:
     st.info("ℹ️ Run the simulation to view layout diagram.")
+
 # === Bottleneck Detection and Suggestion ===
 st.subheader("💡 Bottleneck Analysis and Suggestion")
 
