@@ -9,8 +9,6 @@ import zipfile
 from graphviz import Digraph
 import os
 
-
-
 # === Authentication Setup ===
 USERNAME = "aksh.fii"
 PASSWORD = "foxy123"
@@ -350,16 +348,28 @@ else:
 if st.button("📦 Download All Charts and Tables as ZIP"):
     mem_zip = BytesIO()
     with zipfile.ZipFile(mem_zip, mode="w") as zf:
-        if 'towrite' in locals():
+        # Add Excel summary file
+        if 'towrite' in locals() and towrite is not None:
             zf.writestr("simulation_summary.xlsx", towrite.getvalue())
-        if 'img_buffers' in locals():
+
+        # Add WIP chart images
+        if 'img_buffers' in locals() and isinstance(img_buffers, dict):
             for group, buf in img_buffers.items():
-                zf.writestr(f"WIP_{group}.png", buf.getvalue())
-        if layout_png_buf.getbuffer().nbytes > 0:
-            zf.writestr("Linear_Production_Layout.png", layout_png_buf.getvalue())
+                if buf is not None:
+                    zf.writestr(f"WIP_{group}.png", buf.getvalue())
+
+        # Add production layout diagram
+        if 'layout_png_buf' in locals() and layout_png_buf is not None:
+            if layout_png_buf.getbuffer().nbytes > 0:
+                zf.writestr("Linear_Production_Layout.png", layout_png_buf.getvalue())
 
     mem_zip.seek(0)
-    st.download_button("📅 Download All as ZIP", data=mem_zip, file_name="simulation_results_bundle.zip", mime="application/zip")
+    st.download_button(
+        "📅 Download All as ZIP",
+        data=mem_zip,
+        file_name="simulation_results.zip",
+        mime="application/zip"
+    )
 else:
     st.info("⚠️ Click **Run Simulation** to generate results and charts.")
 
