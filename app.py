@@ -1,3 +1,5 @@
+# === PART 1 ===
+
 import streamlit as st
 import simpy
 import matplotlib.pyplot as plt
@@ -7,7 +9,6 @@ import pandas as pd
 from io import BytesIO
 import zipfile
 from graphviz import Digraph
-import os
 
 # === Authentication Setup ===
 USERNAME = "aksh.fii"
@@ -32,7 +33,7 @@ if not st.session_state.skip_password:
 
     if not st.session_state.authenticated:
         user = st.text_input("👤 Username")
-        pwd = st.text_input("🔒 Password", type="password")
+        pwd = st.text_input("🔐 Password", type="password")
 
         if user and pwd and not st.session_state.password_attempted:
             st.session_state.password_attempted = True
@@ -62,7 +63,8 @@ with col1:
     if "group_names" not in st.session_state or len(st.session_state.group_names) != num_groups:
         st.session_state.group_names = [""] * num_groups
         st.session_state.station_groups = {}
-        st.session_state.conveyor_settings = {}
+        st.session_state.conveyor_flags = {}
+        st.session_state.entry_intervals = {}
 
     for i in range(num_groups):
         name = st.text_input(f"Group {i+1} Name", key=f"name_{i}").strip().upper()
@@ -70,61 +72,43 @@ with col1:
 
         if name:
             eq_count = st.number_input(f"Number of Equipment in {name}", 1, key=f"eq_count_{i}")
-            eq_times = [st.number_input(f"Cycle Time for {name} - EQ{j+1} (sec)", 0.1, key=f"ct_{i}_{j+1}") for j in range(eq_count)]
-            st.session_state.station_groups[name] = {f"{name} - EQ{j+1}": ct for j, ct in enumerate(eq_times)}
+            eq_times = [
+                st.number_input(f"Cycle Time for {name} - EQ{j+1} (sec)", 0.1, key=f"ct_{i}_{j+1}")
+                for j in range(eq_count)
+            ]
+            st.session_state.station_groups[name] = {
+                f"{name} - EQ{j+1}": ct for j, ct in enumerate(eq_times)
+            }
 
-            is_conveyor = st.checkbox(f"{name} behaves like conveyor (can take multiple boards)", key=f"conv_{i}")
-            entry_interval = 1.0
-            if is_conveyor:
-                entry_interval = st.number_input(f"Time between board entry into {name} (sec)", min_value=0.0, value=1.0, step=0.1, key=f"interval_{i}")
-            st.session_state.conveyor_settings[name] = {"is_conveyor": is_conveyor, "interval": entry_interval}
-# === Step 2: Connections ===
-with col2:
-    st.header("Step 2: Connect Stations")
-    if "from_stations" not in st.session_state:
-        st.session_state.from_stations = {}
-    if "connections" not in st.session_state:
-        st.session_state.connections = {}
+            is_conveyor = st.selectbox(
+                f"Does {name} behave like a conveyor?",
+                options=["No", "Yes"],
+                key=f"conveyor_{i}"
+            )
+            st.session_state.conveyor_flags[name] = (is_conveyor == "Yes")
 
-    for i, name in enumerate(st.session_state.group_names):
-        if not name:
-            continue
-        with st.expander(f"{name} Connections"):
-            from_options = ['START'] + [g for g in st.session_state.group_names if g and g != name]
-            to_options = ['STOP'] + [g for g in st.session_state.group_names if g and g != name]
-
-            from_selected = st.multiselect(f"{name} receives from:", from_options, key=f"from_{i}")
-            to_selected = st.multiselect(f"{name} sends to:", to_options, key=f"to_{i}")
-
-            st.session_state.from_stations[name] = [] if "START" in from_selected else from_selected
-            st.session_state.connections[name] = [] if "STOP" in to_selected else to_selected
-
-# === Step 3: Duration ===
-st.markdown("---")
-st.header("Step 3: ⏱️ Enter Simulation Duration")
-sim_time = st.number_input("Simulation Time (seconds)", min_value=10, value=100, step=10)
-
-if st.button("▶️ Run Simulation"):
-    st.session_state.simulate = True
-    st.session_state.sim_time = sim_time
-
+            if is_conveyor == "Yes":
+                interval = st.number_input(f"Entry interval for {name} (sec)", 0.0, step=0.1, key=f"entryint_{i}")
+                st.session_state.entry_intervals[name] = interval
+            else:
+                st.session_state.entry_intervals[name] = None
 # === Run Simulation ===
 if st.session_state.get("simulate"):
     station_groups = st.session_state.station_groups
     from_stations = st.session_state.from_stations
     connections = st.session_state.connections
     sim_time = st.session_state.sim_time
-    conveyor_settings = st.session_state.conveyor_settings
+    conveyor_config = st.session_state.conveyor_config
     valid_groups = {g: eqs for g, eqs in station_groups.items() if g}
 
     class FactorySimulation:
-        def __init__(self, env, station_groups, duration, connections, from_stations, conveyor_settings):
+        def __init__(self, env, station_groups, duration, connections, from_stations, conveyor_config):
             self.env = env
             self.station_groups = station_groups
             self.connections = connections
             self.from_stations = from_stations
             self.duration = duration
-            self.conveyor_settings = conveyor_settings
+            self.conveyor_config = conveyor_config
 
             self.buffers = defaultdict(lambda: simpy.Store(env))
             self.resources = {eq: simpy.Resource(env, capacity=1)
@@ -142,52 +126,46 @@ if st.session_state.get("simulate"):
 
         def equipment_worker(self, eq):
             group = self.equipment_to_group[eq]
+            is_conveyor = self.conveyor_config.get(group, {}).get('is_conveyor', False)
+            entry_interval = self.conveyor_config.get(group, {}).get('entry_interval', 0.0)
+
             while True:
                 board = yield self.buffers[group].get()
                 self.throughput_in[eq] += 1
+
                 with self.resources[eq].request() as req:
                     yield req
                     start = self.env.now
                     yield self.env.timeout(self.cycle_times[eq])
                     end = self.env.now
                     self.equipment_busy_time[eq] += (end - start)
+
                 self.throughput_out[eq] += 1
                 for tgt in self.connections.get(group, []):
                     yield self.buffers[tgt].put(board)
 
+                # Only delay between board arrivals if station behaves like a conveyor
+                if is_conveyor and entry_interval > 0:
+                    yield self.env.timeout(entry_interval)
+
         def feeder(self):
-            for group in self.station_groups:
-                if not self.from_stations.get(group):  # START groups
-                    if self.conveyor_settings[group]["is_conveyor"]:
-                        self.env.process(self.feed_conveyor_group(group))
-                    else:
-                        self.env.process(self.feed_serial_group(group))
-
-        def feed_serial_group(self, group):
+            start_groups = [g for g in self.station_groups if not self.from_stations.get(g)]
             while self.env.now < self.duration:
-                board = f"Board-{self.board_id:03d}"
-                self.board_id += 1
-                yield self.buffers[group].put(board)
+                for g in start_groups:
+                    board = f"Board-{self.board_id:03d}"
+                    self.board_id += 1
+                    yield self.buffers[g].put(board)
                 yield self.env.timeout(1)
-
-        def feed_conveyor_group(self, group):
-            interval = self.conveyor_settings[group]["interval"]
-            while self.env.now < self.duration:
-                board = f"Board-{self.board_id:03d}"
-                self.board_id += 1
-                yield self.buffers[group].put(board)
-                yield self.env.timeout(interval)
 
         def track_wip(self):
             while self.env.now < self.duration:
                 self.time_points.append(self.env.now)
                 for group in self.station_groups:
                     prev_out = sum(
-                        sim.throughput_out.get(eq, 0)
-                        for g in self.from_stations.get(group, [])
+                        sim.throughput_out[eq] for g in self.from_stations.get(group, [])
                         for eq in self.station_groups.get(g, [])
                     )
-                    curr_in = sum(sim.throughput_in.get(eq, 0) for eq in self.station_groups[group])
+                    curr_in = sum(sim.throughput_in[eq] for eq in self.station_groups[group])
                     wip = max(0, prev_out - curr_in) if self.from_stations.get(group) else 0
                     self.wip_over_time[group].append(wip)
                 yield self.env.timeout(self.wip_interval)
@@ -198,10 +176,16 @@ if st.session_state.get("simulate"):
                     self.env.process(self.equipment_worker(eq))
             self.env.process(self.feeder())
 
+    # === Create and run the SimPy environment ===
     env = simpy.Environment()
-    sim = FactorySimulation(env, valid_groups, sim_time, connections, from_stations, conveyor_settings)
+    sim = FactorySimulation(env, valid_groups, sim_time, connections, from_stations, conveyor_config)
     sim.run()
     env.run(until=sim_time)
+# === Check for Required Variables ===
+if 'valid_groups' not in locals() or 'sim' not in locals() or 'from_stations' not in locals() or 'sim_time' not in locals():
+    st.warning("❗ Run the simulation first to generate results.")
+    st.stop()
+
 # === Results Summary ===
 st.markdown("---")
 st.subheader("📊 Simulation Results Summary")
@@ -222,7 +206,7 @@ for group in groups:
     curr_in = agg[group]['in']
     agg[group]['wip'] = max(0, prev_out - curr_in)
 
-# Summary Table
+# Prepare DataFrame
 df = pd.DataFrame([{
     "Station Group": g,
     "Boards In": agg[g]['in'],
@@ -241,7 +225,7 @@ df.to_excel(towrite, index=False, sheet_name="Summary")
 towrite.seek(0)
 st.download_button("📥 Download Summary Excel", data=towrite, file_name="simulation_summary.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# === Throughput & WIP Chart ===
+# === Charts: Throughput & WIP ===
 st.subheader("📈 Throughput & WIP")
 fig, ax = plt.subplots(figsize=(12, 5))
 x = range(len(groups))
@@ -265,26 +249,25 @@ ax.legend()
 ax.grid(True, linestyle='--', alpha=0.6)
 st.pyplot(fig)
 
+# Save chart as PNG
 buf = BytesIO()
 fig.savefig(buf, format='png')
 buf.seek(0)
 st.download_button("📥 Download Chart (PNG)", data=buf, file_name="throughput_wip.png", mime="image/png")
 
 # === WIP Over Time Plots ===
-st.subheader("📈 WIP Over Time per Station Group")
+st.subheader("📉 WIP Over Time per Station Group")
 fig, axs = plt.subplots(len(groups), 1, figsize=(8, 3 * len(groups)), sharex=True)
 if len(groups) == 1:
     axs = [axs]
 
 img_buffers = {}
-
 for ax, group in zip(axs, groups):
     ax.plot(sim.time_points, sim.wip_over_time[group], marker='o')
     ax.set_title(f"WIP Over Time: {group}")
     ax.set_ylabel("WIP (units)")
     ax.grid(True)
 
-    # Save individual chart
     buf = BytesIO()
     fig_single, ax_single = plt.subplots()
     ax_single.plot(sim.time_points, sim.wip_over_time[group], marker='o')
@@ -300,25 +283,28 @@ for ax, group in zip(axs, groups):
 axs[-1].set_xlabel("Time (seconds)")
 st.pyplot(fig)
 
-# Download individual WIP charts
+# Chart downloads
 for group, buf in img_buffers.items():
     st.download_button(f"📥 Download WIP Chart PNG - {group}", data=buf, file_name=f"WIP_{group}.png", mime="image/png")
 
-# === Layout Diagram ===
+# === Layout Diagram (Linear) ===
 st.subheader("🗌 Production Line Layout")
-try:
-    dot = Digraph()
-    dot.attr(rankdir="LR", size="8")
-    for group in groups:
-        dot.node(group, shape="box", style="filled", fillcolor="lightblue")
-    for src, tgts in connections.items():
-        for tgt in tgts:
-            dot.edge(src, tgt)
-    st.graphviz_chart(dot.source)
-except Exception as e:
-    st.warning(f"Graphviz layout failed: {e}")
+if groups:
+    try:
+        dot = Digraph()
+        dot.attr(rankdir="LR", size="8")
+        for group in groups:
+            dot.node(group, shape="box", style="filled", fillcolor="lightblue")
+        for src, tgts in connections.items():
+            for tgt in tgts:
+                dot.edge(src, tgt)
+        st.graphviz_chart(dot.source)
+    except Exception as e:
+        st.warning(f"Graphviz layout failed: {e}")
+else:
+    st.info("ℹ️ Run the simulation to view layout diagram.")
 
-# === Bottleneck Analysis ===
+# === Bottleneck Suggestion ===
 st.subheader("💡 Bottleneck Suggestion")
 min_out = float('inf')
 bottleneck_group = None
@@ -335,19 +321,21 @@ if bottleneck_group:
     eq_count = len(eqs)
     new_out_bottleneck = (agg[bottleneck_group]['out'] / eq_count) * (eq_count + 1)
     estimated_final_out = base_out + (new_out_bottleneck - agg[bottleneck_group]['out']) * 0.7
+
     delta_b = round(new_out_bottleneck - agg[bottleneck_group]['out'])
     delta_final = round(estimated_final_out - base_out)
 
     st.markdown(
-        f"If you **add 1 more equipment** to **{bottleneck_group}** (CT: **{round(avg_ct, 1)} sec**), "
-        f"output may increase by **+{delta_b} boards**, and final throughput by **~{delta_final} boards**."
+        f"If you **add 1 more equipment** to **{bottleneck_group}** (avg CT = {round(avg_ct,1)}s), "
+        f"output may increase by **{delta_b} boards** in that group, and **{delta_final}** overall."
     )
 
-# === ZIP Download of All Charts ===
+# === ZIP Download ===
 if st.button("📦 Download All Charts and Tables as ZIP"):
     mem_zip = BytesIO()
     with zipfile.ZipFile(mem_zip, mode="w") as zf:
-        zf.writestr("simulation_summary.xlsx", towrite.getvalue())
+        if towrite.getbuffer().nbytes > 0:
+            zf.writestr("simulation_summary.xlsx", towrite.getvalue())
         for group, buf in img_buffers.items():
             zf.writestr(f"WIP_{group}.png", buf.getvalue())
         zf.writestr("throughput_wip.png", buf.getvalue())
