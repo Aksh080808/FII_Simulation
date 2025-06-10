@@ -256,6 +256,10 @@ st.download_button("📥 Download Chart (PNG)", data=buf, file_name="throughput_
 
 # === WIP Over Time Plots ===
 st.subheader("📈 WIP Over Time per Station Group")
+wip_df = pd.DataFrame(sim.wip_over_time)
+wip_df["Time"] = sim.time_points
+wip_df = wip_df.set_index("Time")
+
 fig, axs = plt.subplots(len(groups), 1, figsize=(8, 3 * len(groups)), sharex=True)
 if len(groups) == 1:
     axs = [axs]
@@ -263,7 +267,7 @@ if len(groups) == 1:
 img_buffers = {}
 
 for ax, group in zip(axs, groups):
-    ax.plot(sim.time_points, sim.wip_over_time[group], marker='o')
+    ax.plot(wip_df.index, wip_df[group], marker='o')
     ax.set_title(f"WIP Over Time: {group}")
     ax.set_ylabel("WIP (units)")
     ax.grid(True)
@@ -271,7 +275,7 @@ for ax, group in zip(axs, groups):
     # Save individual chart to buffer
     buf = BytesIO()
     fig_single, ax_single = plt.subplots()
-    ax_single.plot(sim.time_points, sim.wip_over_time[group], marker='o')
+    ax_single.plot(wip_df.index, wip_df[group], marker='o')
     ax_single.set_title(f"WIP Over Time: {group}")
     ax_single.set_ylabel("WIP (units)")
     ax_single.set_xlabel("Time (seconds)")
