@@ -256,6 +256,8 @@ st.download_button("📥 Download Chart (PNG)", data=buf, file_name="throughput_
 
 # === WIP Over Time Plots ===
 st.subheader("📈 WIP Over Time per Station Group")
+
+# Convert simulation data into a DataFrame
 wip_df = pd.DataFrame(sim.wip_over_time)
 wip_df["Time"] = sim.time_points
 wip_df = wip_df.set_index("Time")
@@ -267,19 +269,31 @@ if len(groups) == 1:
 img_buffers = {}
 
 for ax, group in zip(axs, groups):
-    ax.plot(wip_df.index, wip_df[group], marker='o')
-    ax.set_title(f"WIP Over Time: {group}")
-    ax.set_ylabel("WIP (units)")
-    ax.grid(True)
+    if group in wip_df.columns:
+        ax.plot(wip_df.index, wip_df.loc[:, group], marker='o')  # Ensure correct WIP values
+        ax.set_title(f"WIP Over Time: {group}")
+        ax.set_ylabel("WIP (units)")
+        ax.grid(True)
+    else:
+        ax.set_title(f"WIP Over Time: {group} (No Data)")
+        ax.set_ylabel("WIP (units)")
+        ax.grid(True)
 
     # Save individual chart to buffer
     buf = BytesIO()
     fig_single, ax_single = plt.subplots()
-    ax_single.plot(wip_df.index, wip_df[group], marker='o')
-    ax_single.set_title(f"WIP Over Time: {group}")
-    ax_single.set_ylabel("WIP (units)")
-    ax_single.set_xlabel("Time (seconds)")
-    ax_single.grid(True)
+    if group in wip_df.columns:
+        ax_single.plot(wip_df.index, wip_df.loc[:, group], marker='o')  # Ensure correct WIP values
+        ax_single.set_title(f"WIP Over Time: {group}")
+        ax_single.set_ylabel("WIP (units)")
+        ax_single.set_xlabel("Time (seconds)")
+        ax_single.grid(True)
+    else:
+        ax_single.set_title(f"WIP Over Time: {group} (No Data)")
+        ax_single.set_ylabel("WIP (units)")
+        ax_single.set_xlabel("Time (seconds)")
+        ax_single.grid(True)
+
     fig_single.savefig(buf, format="png")
     plt.close(fig_single)
     buf.seek(0)
