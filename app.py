@@ -270,9 +270,14 @@ img_buffers = {}
 
 for ax, group in zip(axs, groups):
     if group in wip_df.columns:
-        ax.plot(wip_df.index, wip_df.loc[:, group], marker='o')  # Ensure correct WIP values
+        max_wip = wip_df[group].max()
+        y_ticks = np.linspace(0, max(10, max_wip * 1.1), num=10)  # Ensure at least 10 ticks up to 10% above max WIP
+        y_ticks = [int(tick) if tick == int(tick) else tick for tick in y_ticks]  # Convert to int if whole number
+        
+        ax.plot(wip_df.index, wip_df.loc[:, group], marker='o')
         ax.set_title(f"WIP Over Time: {group}")
         ax.set_ylabel("WIP (units)")
+        ax.set_yticks(y_ticks)
         ax.grid(True)
     else:
         ax.set_title(f"WIP Over Time: {group} (No Data)")
@@ -283,10 +288,15 @@ for ax, group in zip(axs, groups):
     buf = BytesIO()
     fig_single, ax_single = plt.subplots()
     if group in wip_df.columns:
-        ax_single.plot(wip_df.index, wip_df.loc[:, group], marker='o')  # Ensure correct WIP values
+        max_wip = wip_df[group].max()
+        y_ticks = np.linspace(0, max(10, max_wip * 1.1), num=10)
+        y_ticks = [int(tick) if tick == int(tick) else tick for tick in y_ticks]
+        
+        ax_single.plot(wip_df.index, wip_df.loc[:, group], marker='o')
         ax_single.set_title(f"WIP Over Time: {group}")
         ax_single.set_ylabel("WIP (units)")
         ax_single.set_xlabel("Time (seconds)")
+        ax_single.set_yticks(y_ticks)
         ax_single.grid(True)
     else:
         ax_single.set_title(f"WIP Over Time: {group} (No Data)")
